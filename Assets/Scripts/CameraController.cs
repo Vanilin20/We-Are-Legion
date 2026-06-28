@@ -77,6 +77,7 @@ public class CameraFollow : MonoBehaviour
                 }
             }
         }
+        
         else
         {
             cameraTouchId = -1;
