@@ -4,6 +4,7 @@ public class CameraFollow : MonoBehaviour
 {
     [Header("Ціль")]
     [SerializeField] private Transform target;
+    [SerializeField]public GameObject CanvasJoystick;
 
     [Header("Слідування")]
     [SerializeField] private Vector3 offset = new Vector3(0, 0, -10f);
@@ -26,18 +27,18 @@ public class CameraFollow : MonoBehaviour
     {
         HandleDrag();
 
-        if (!isDragging && Time.time - lastDragTime > returnDelay)
-        {
-            manualOffset = Vector3.Lerp(manualOffset, Vector3.zero, returnSpeed * Time.deltaTime);
-        }
-
         if (target != null)
         {
+            if (!isDragging && Time.time - lastDragTime > returnDelay)
+            {
+                manualOffset = Vector3.Lerp(manualOffset, Vector3.zero, returnSpeed * Time.deltaTime);
+            }
+
             Vector3 desired = target.position + offset + manualOffset;
             transform.position = Vector3.Lerp(transform.position, desired, followSpeed * Time.deltaTime);
         }
+        // без цілі — offset не повертається, камера вільно рухається
     }
-
     void HandleDrag()
     {
         Vector2 delta = Vector2.zero;
@@ -99,7 +100,23 @@ public class CameraFollow : MonoBehaviour
 
         if (delta != Vector2.zero)
         {
-            manualOffset += new Vector3(-delta.x, -delta.y, 0);
+            if (target != null)
+            {
+                manualOffset += new Vector3(-delta.x, -delta.y, 0);
+            }
+            else
+            {
+                transform.position += new Vector3(-delta.x, -delta.y, 0);
+            }
         }
+        
+    }
+
+    public void SetTarget(Transform newTarget)
+    {
+        target = newTarget;
+        
+        if (CanvasJoystick != null)
+            CanvasJoystick.SetActive(target != null);
     }
 }
