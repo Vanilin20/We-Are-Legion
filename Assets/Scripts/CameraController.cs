@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class CameraFollow : MonoBehaviour
 {
@@ -29,7 +30,12 @@ public class CameraFollow : MonoBehaviour
 
         if (target != null)
         {
-            if (!isDragging && Time.time - lastDragTime > returnDelay)
+            // Поки гравець рухає джойстик — камера лише слідкує, без ручного зсуву
+            if (Joystick.IsActive)
+            {
+                manualOffset = Vector3.Lerp(manualOffset, Vector3.zero, returnSpeed * Time.deltaTime);
+            }
+            else if (!isDragging && Time.time - lastDragTime > returnDelay)
             {
                 manualOffset = Vector3.Lerp(manualOffset, Vector3.zero, returnSpeed * Time.deltaTime);
             }
@@ -68,10 +74,7 @@ public class CameraFollow : MonoBehaviour
 
                 if (t.phase == TouchPhase.Began && cameraTouchId == -1)
                 {
-                    bool isJoystickZone = t.position.x < Screen.width * joystickZonePercent;
-                    bool joystickActive = FixedJoystick.IsActive; // ✅ нова перевірка
-
-                    if (!isJoystickZone && !joystickActive)
+                    if (!IsCameraDragBlocked(t.fingerId, t.position))
                     {
                         cameraTouchId = t.fingerId;
                     }
@@ -83,15 +86,11 @@ public class CameraFollow : MonoBehaviour
         {
             cameraTouchId = -1;
 
-            if (Input.GetMouseButton(0))
+            if (Input.GetMouseButton(0) && !IsCameraDragBlocked(-1, Input.mousePosition))
             {
-                bool isJoystick = Input.mousePosition.x < Screen.width * joystickZonePercent;
-                if (!isJoystick)
-                {
-                    delta = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * dragSensitivity * 10f;
-                    isDragging = true;
-                    lastDragTime = Time.time;
-                }
+                delta = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * dragSensitivity * 10f;
+                isDragging = true;
+                lastDragTime = Time.time;
             }
 
             if (Input.GetMouseButtonUp(0))
@@ -118,5 +117,22 @@ public class CameraFollow : MonoBehaviour
         
         if (CanvasJoystick != null)
             CanvasJoystick.SetActive(target != null);
+    }
+
+    bool IsCameraDragBlocked(int fingerId, Vector2 screenPosition)
+    {
+        if (Joystick.IsActive)
+            return true;
+
+        if (screenPosition.x < Screen.width * joystickZonePercent)
+            return true;
+
+        if (EventSystem.current == null)
+            return false;
+
+        if (fingerId >= 0)
+            return EventSystem.current.IsPointerOverGameObject(fingerId);
+
+        return EventSystem.current.IsPointerOverGameObject();
     }
 }
