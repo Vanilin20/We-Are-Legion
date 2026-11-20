@@ -39,10 +39,19 @@ public class CameraFollow : MonoBehaviour
         }
         // без цілі — offset не повертається, камера вільно рухається
     }
+    // Увімкнено режимом «Копати»: палець позначає клітинки, а не тягне камеру.
+    public static bool DragBlocked;
+
     void HandleDrag()
     {
         Vector2 delta = Vector2.zero;
         isDragging = false;
+
+        if (DragBlocked)
+        {
+            cameraTouchId = -1;
+            return;
+        }
 
         if (Input.touchCount > 0)
         {

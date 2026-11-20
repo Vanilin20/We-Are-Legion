@@ -26,6 +26,8 @@ public class ClickableTarget : MonoBehaviour
 
     void TrySelect(Vector2 screenPos)
     {
+        if (DigInput.IsActive) return;
+
         Vector2 worldPos = Camera.main.ScreenToWorldPoint(screenPos);
         RaycastHit2D hit = Physics2D.Raycast(worldPos, Vector2.zero);
 
