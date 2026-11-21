@@ -1,15 +1,21 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Колонія: усі мурахи й черги завдань по групах.
+// Колонія: усі мурахи й черги завдань по групах. Стежить за поразкою.
 public class Colony : MonoBehaviour
 {
     public static Colony Instance { get; private set; }
 
+    [Tooltip("Що показати, коли не лишилось жодної мурахи")]
+    [SerializeField] private GameOverScreen gameOverScreen;
+
     private readonly Dictionary<AntGroup, TaskQueue> queues = new Dictionary<AntGroup, TaskQueue>();
     private readonly List<AntAgent> ants = new List<AntAgent>();
+    private bool hadAnts;
+    private bool gameOver;
 
     public IReadOnlyList<AntAgent> Ants => ants;
+    public bool IsGameOver => gameOver;
 
     void Awake()
     {
@@ -23,21 +29,33 @@ public class Colony : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    void Update()
+    {
+        // Поразка: у колонії не лишилось жодної мурахи (королева не рахується).
+        if (hadAnts && !gameOver && ants.Count == 0)
+        {
+            gameOver = true;
+            if (gameOverScreen != null) gameOverScreen.Show();
+            else Debug.Log("Колонія загинула");
+        }
+    }
+
     public TaskQueue Queue(AntGroup group) => queues[group];
 
     public void Register(AntAgent ant)
     {
         if (!ants.Contains(ant)) ants.Add(ant);
+        hadAnts = true;
     }
 
     public void Unregister(AntAgent ant) => ants.Remove(ant);
 
     // Чи зайнята клітинка іншою мурахою (вона там стоїть, працює або вже туди йде).
     // Мурахи в русі можуть проходити одна крізь одну — займають лише місце, де зупиняться.
-    public bool IsReservedByOther(Vector3Int cell, AntAgent me)
+    public bool IsReservedByOther(GridManager grid, Vector3Int cell, AntAgent me)
     {
         foreach (AntAgent a in ants)
-            if (a != me && a.enabled && a.RestCell == cell) return true;
+            if (a != me && a.enabled && a.RestGrid == grid && a.RestCell == cell) return true;
         return false;
     }
 

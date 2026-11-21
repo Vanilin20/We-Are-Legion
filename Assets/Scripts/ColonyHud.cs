@@ -24,13 +24,16 @@ public class ColonyHud : MonoBehaviour
         Colony colony = Colony.Instance;
         if (colony == null || text == null) return;
 
-        string s = "BUILD " + colony.CountIn(AntGroup.Builder)
+        string s = "FOOD " + (Storage.Instance != null ? Storage.Instance.Food : 0) + "   "
+                 + "BUILD " + colony.CountIn(AntGroup.Builder)
                  + "   WORK " + colony.CountIn(AntGroup.Worker)
                  + "   WAR " + colony.CountIn(AntGroup.Warrior);
 
         AntAgent sel = AntSelection.Instance != null ? AntSelection.Instance.Selected : null;
         if (sel != null)
-            s += "\n" + GroupName(sel.Group) + "  HP " + sel.Hp + "/" + sel.MaxHp + "  " + StateName(sel);
+            s += "\n" + GroupName(sel.Group) + "  HP " + sel.Hp + "/" + sel.MaxHp + "  " + StateName(sel)
+               + (sel.CargoCount > 0 ? "  CARRY " + sel.CargoCount + "/" + sel.CarryCapacity : "")
+               + (sel.Hungry ? "  HUNGRY" : "");
 
         text.text = s;
     }

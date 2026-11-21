@@ -73,8 +73,11 @@ public class DigInput : MonoBehaviour
 
         if (!held) { stroke = false; return; }
 
-        GridManager grid = GridManager.Instance;
-        Vector3Int cell = grid.WorldToCell(Camera.main.ScreenToWorldPoint(screen));
+        // Копати можна лише там, де є стіни (у мурашнику).
+        Vector3 world = Camera.main.ScreenToWorldPoint(screen);
+        GridManager grid = GridManager.At(world);
+        if (grid == null || !grid.HasWalls) { stroke = false; return; }
+        Vector3Int cell = grid.WorldToCell(world);
 
         if (down)
         {

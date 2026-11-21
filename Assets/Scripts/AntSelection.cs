@@ -49,7 +49,11 @@ public class AntSelection : MonoBehaviour
 
         if (!DigInput.IsActive) ReadTap();
 
-        if (Selected != null) ring.position = Selected.transform.position;
+        if (Selected != null)
+        {
+            ring.position = Selected.transform.position;
+            if (ring.gameObject.scene != Selected.gameObject.scene) SceneUtil.MoveToSceneOf(ring.gameObject, Selected.gameObject);
+        }
     }
 
     public void Select(AntAgent ant)
@@ -112,10 +116,17 @@ public class AntSelection : MonoBehaviour
 
         if (Selected == null) return;
 
-        GridManager grid = GridManager.Instance;
+        GridManager grid = GridManager.At(world);
+        if (grid == null) { Deselect(); return; }
         Vector3Int cell = grid.WorldToCell(world);
 
-        if (grid.IsDiggable(cell))
+        FoodItem food = FoodItem.At(grid, cell);
+        if (food != null && food.Task != null)
+        {
+            if (!Selected.AssignManual(food.Task, Colony.Instance.Queue(AntGroup.Worker)))
+                Debug.Log("Мураха не може взяти їжу в " + cell + " (недосяжно або руки повні)");
+        }
+        else if (grid.IsDiggable(cell))
         {
             DigTask dig = grid.GetOrMarkDigTask(cell);
             if (!Selected.AssignManual(dig, Colony.Instance.Queue(AntGroup.Builder)))
@@ -123,7 +134,7 @@ public class AntSelection : MonoBehaviour
         }
         else if (grid.IsWalkable(cell))
         {
-            if (!Selected.AssignManual(new MoveTask(cell), null))
+            if (!Selected.AssignManual(new MoveTask(grid, cell), null))
                 Debug.Log("Мураха не може дійти до клітинки " + cell);
         }
         else

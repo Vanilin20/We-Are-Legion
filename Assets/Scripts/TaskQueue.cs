@@ -42,30 +42,33 @@ public class TaskQueue
         if (IsTakenBy(task, ant)) takenBy.Remove(task);
     }
 
-    // Перше вільне досяжне завдання. path — шлях до місця роботи (без стартової клітинки).
-    public bool TryTake(AntAgent ant, GridManager grid, Vector3Int antCell, out AntTask task, out List<Vector3Int> path)
+    // Перше вільне досяжне завдання. maxSteps > 0 — лише не далі стількох клітинок.
+    public bool TryTake(AntAgent ant, GridManager antGrid, Vector3Int antCell, out AntTask task, out Route route,
+        int maxSteps = 0)
     {
         task = null;
-        path = null;
+        route = null;
         if (order.Count == 0) return false;
 
-        Dictionary<Vector3Int, Vector3Int> reach = grid.BuildReachMap(antCell);
+        var router = new Router();
         Colony colony = Colony.Instance;
-        System.Func<Vector3Int, bool> isFree = c => colony == null || !colony.IsReservedByOther(c, ant);
+        System.Func<GridManager, Vector3Int, bool> isFree =
+            (g, c) => colony == null || !colony.IsReservedByOther(g, c, ant);
 
         for (int i = 0; i < order.Count; i++)
         {
             AntTask t = order[i];
             if (takenBy.ContainsKey(t)) continue;
-            if (!t.IsValid(grid)) { Remove(t); i--; continue; }
+            if (!t.IsValid(ant)) continue;
 
             // недосяжно або всі місця біля завдання зайняті іншими мурахами — відкладаємо
-            List<Vector3Int> p = grid.PathFor(reach, antCell, t, isFree);
-            if (p == null) continue;
+            Route r = router.Find(antGrid, antCell, t, isFree);
+            if (r == null) continue;
+            if (maxSteps > 0 && (r.Legs.Count > 1 || r.Legs[0].Path.Count > maxSteps)) continue;
 
             takenBy[t] = ant;
             task = t;
-            path = p;
+            route = r;
             return true;
         }
         return false;

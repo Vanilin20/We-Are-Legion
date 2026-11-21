@@ -2,13 +2,29 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-// Сітка мурашника поверх двох Tilemap:
-// wallTilemap  — земля/стіни (те, що копаємо),
+// Сітка однієї локації (мурашник або поверхня) поверх Tilemap:
+// wallTilemap  — земля/стіни (те, що копаємо); на поверхні може бути порожнім,
 // floorTilemap — підлога (по ній ходять).
 // Копання = прибрати клітинку зі стін.
 public class GridManager : MonoBehaviour
 {
+    private static readonly List<GridManager> all = new List<GridManager>();
+    public static IReadOnlyList<GridManager> All => all;
+
+    // Головна локація — мурашник (позначка isMain). Для старого коду, що знає лише одну сітку.
     public static GridManager Instance { get; private set; }
+
+    // Локація, в межах якої лежить точка світу.
+    public static GridManager At(Vector3 world)
+    {
+        foreach (GridManager g in all)
+            if (g.InBounds(g.WorldToCell(world))) return g;
+        return null;
+    }
+
+    [Header("Локація")]
+    [SerializeField] private string locationName = "Anthill";
+    [SerializeField] private bool isMain = true;
 
     [Header("Tilemap")]
     [SerializeField] private Tilemap wallTilemap;
@@ -36,47 +52,57 @@ public class GridManager : MonoBehaviour
         Vector3Int.up, Vector3Int.down, Vector3Int.left, Vector3Int.right
     };
 
+    public string LocationName => locationName;
+    public bool HasWalls => wallTilemap != null;
+
+    // Сітка, за якою рахуємо клітинки (стіни й підлога вирівняні однаково).
+    private Tilemap CellMap => wallTilemap != null ? wallTilemap : floorTilemap;
+
     void Awake()
     {
-        Instance = this;
-
-        if (wallTilemap == null || floorTilemap == null)
+        if (floorTilemap == null)
         {
-            Debug.LogError("GridManager: не призначено wallTilemap або floorTilemap");
+            Debug.LogError("GridManager " + name + ": не призначено floorTilemap");
             enabled = false;
             return;
         }
 
-        CellWorldSize = (wallTilemap.CellToWorld(Vector3Int.right) - wallTilemap.CellToWorld(Vector3Int.zero)).magnitude;
+        all.Add(this);
+        if (isMain || Instance == null) Instance = this;
 
-        wallTilemap.CompressBounds();
+        CellWorldSize = (CellMap.CellToWorld(Vector3Int.right) - CellMap.CellToWorld(Vector3Int.zero)).magnitude;
+
         floorTilemap.CompressBounds();
-        walkBounds = wallTilemap.cellBounds;
+        if (wallTilemap != null) wallTilemap.CompressBounds();
+        walkBounds = CellMap.cellBounds;
 
-        CreateMarkLayer();
+        if (wallTilemap != null) CreateMarkLayer();
     }
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        all.Remove(this);
+        if (Instance == this) Instance = all.Count > 0 ? all[0] : null;
     }
 
     // ---------- Клітинки ----------
 
-    public Vector3Int WorldToCell(Vector3 world) => wallTilemap.WorldToCell(world);
+    public Vector3Int WorldToCell(Vector3 world) => CellMap.WorldToCell(world);
 
     public Vector3 CellCenter(Vector3Int cell)
     {
-        Vector3 p = wallTilemap.GetCellCenterWorld(cell);
+        Vector3 p = CellMap.GetCellCenterWorld(cell);
         p.z = 0f;
         return p;
     }
 
-    public bool HasWall(Vector3Int cell) => wallTilemap.HasTile(cell);
+    public bool InBounds(Vector3Int cell) => Contains(walkBounds, cell);
+
+    public bool HasWall(Vector3Int cell) => wallTilemap != null && wallTilemap.HasTile(cell);
 
     public bool IsWalkable(Vector3Int cell)
     {
-        return Contains(walkBounds, cell) && !wallTilemap.HasTile(cell) && floorTilemap.HasTile(cell);
+        return Contains(walkBounds, cell) && !HasWall(cell) && floorTilemap.HasTile(cell);
     }
 
     // Крайній ряд стін не копаємо, щоб мурахи не вийшли за мапу.
@@ -84,12 +110,12 @@ public class GridManager : MonoBehaviour
     {
         BoundsInt b = walkBounds;
         bool inside = cell.x > b.xMin && cell.x < b.xMax - 1 && cell.y > b.yMin && cell.y < b.yMax - 1;
-        return inside && wallTilemap.HasTile(cell);
+        return inside && HasWall(cell);
     }
 
     public bool Dig(Vector3Int cell)
     {
-        if (!wallTilemap.HasTile(cell)) return false;
+        if (!HasWall(cell)) return false;
 
         wallTilemap.SetTile(cell, null);
         if (!floorTilemap.HasTile(cell) && floorTile != null)
@@ -106,7 +132,7 @@ public class GridManager : MonoBehaviour
     public bool Mark(Vector3Int cell)
     {
         if (!IsDiggable(cell) || digTasks.ContainsKey(cell)) return false;
-        var task = new DigTask(cell);
+        var task = new DigTask(this, cell);
         digTasks[cell] = task;
         BuilderQueue.Add(task);
         markTilemap.SetTile(cell, markTile);
@@ -120,7 +146,7 @@ public class GridManager : MonoBehaviour
             digTasks.Remove(cell);
             if (Colony.Instance != null) BuilderQueue.Remove(task);
         }
-        markTilemap.SetTile(cell, null);
+        if (markTilemap != null) markTilemap.SetTile(cell, null);
     }
 
     public bool IsMarked(Vector3Int cell) => digTasks.ContainsKey(cell);
@@ -210,8 +236,8 @@ public class GridManager : MonoBehaviour
     public List<Vector3Int> PathFor(Dictionary<Vector3Int, Vector3Int> reach, Vector3Int start, AntTask task,
         System.Func<Vector3Int, bool> isFree = null)
     {
+        // На саму клітинку йдемо, навіть якщо там хтось стоїть: вільна мураха сама відійде.
         if (task.StandNextTo) return PathToNeighbor(reach, start, task.Cell, isFree);
-        if (isFree != null && !isFree(task.Cell)) return null;
         return PathTo(reach, start, task.Cell);
     }
 
