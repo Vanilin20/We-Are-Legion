@@ -40,6 +40,8 @@ public class Joystick : MonoBehaviour, IPointerDownHandler, IDragHandler, IPoint
 
     private Vector2 input = Vector2.zero;
 
+    public static bool IsActive { get; private set; }
+
     protected virtual void Start()
     {
         HandleRange = handleRange;
@@ -59,6 +61,7 @@ public class Joystick : MonoBehaviour, IPointerDownHandler, IDragHandler, IPoint
 
     public virtual void OnPointerDown(PointerEventData eventData)
     {
+        IsActive = true;
         OnDrag(eventData);
     }
 
@@ -131,6 +134,7 @@ public class Joystick : MonoBehaviour, IPointerDownHandler, IDragHandler, IPoint
 
     public virtual void OnPointerUp(PointerEventData eventData)
     {
+        IsActive = false;
         input = Vector2.zero;
         handle.anchoredPosition = Vector2.zero;
     }
