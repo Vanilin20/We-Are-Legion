@@ -22,8 +22,10 @@ public class GridManager : MonoBehaviour
     [Header("Пошук шляху")]
     [SerializeField] private int maxSearchCells = 20000;
 
-    public DigTaskQueue DigQueue { get; } = new DigTaskQueue();
     public float CellWorldSize { get; private set; } = 1f;
+
+    // Позначені клітинки -> завдання копання (у черзі будівельників).
+    private readonly Dictionary<Vector3Int, DigTask> digTasks = new Dictionary<Vector3Int, DigTask>();
 
     private Tilemap markTilemap;
     private Tile markTile;
@@ -99,20 +101,41 @@ public class GridManager : MonoBehaviour
 
     // ---------- Позначки ----------
 
+    private static TaskQueue BuilderQueue => Colony.Instance.Queue(AntGroup.Builder);
+
     public bool Mark(Vector3Int cell)
     {
-        if (!IsDiggable(cell) || !DigQueue.Add(cell)) return false;
+        if (!IsDiggable(cell) || digTasks.ContainsKey(cell)) return false;
+        var task = new DigTask(cell);
+        digTasks[cell] = task;
+        BuilderQueue.Add(task);
         markTilemap.SetTile(cell, markTile);
         return true;
     }
 
     public void Unmark(Vector3Int cell)
     {
-        DigQueue.Remove(cell);
+        if (digTasks.TryGetValue(cell, out DigTask task))
+        {
+            digTasks.Remove(cell);
+            if (Colony.Instance != null) BuilderQueue.Remove(task);
+        }
         markTilemap.SetTile(cell, null);
     }
 
-    public bool IsMarked(Vector3Int cell) => DigQueue.Contains(cell);
+    public bool IsMarked(Vector3Int cell) => digTasks.ContainsKey(cell);
+
+    public DigTask GetDigTask(Vector3Int cell)
+    {
+        return digTasks.TryGetValue(cell, out DigTask t) ? t : null;
+    }
+
+    // Позначити (якщо ще ні) і повернути завдання копання. null — тут копати не можна.
+    public DigTask GetOrMarkDigTask(Vector3Int cell)
+    {
+        Mark(cell);
+        return GetDigTask(cell);
+    }
 
     // ---------- Пошук шляху (BFS по сітці) ----------
 
@@ -138,9 +161,11 @@ public class GridManager : MonoBehaviour
         return cameFrom;
     }
 
-    // Шлях до будь-якої прохідної клітинки поруч із target. null — недосяжно.
+    // Шлях до прохідної клітинки поруч із target. null — недосяжно.
+    // isFree (необов'язково) — пропускати клітинки, де вже стоїть інша мураха.
     // Шлях не містить стартову клітинку; порожній список — вже стоїмо поруч.
-    public List<Vector3Int> PathToNeighbor(Dictionary<Vector3Int, Vector3Int> reach, Vector3Int start, Vector3Int target)
+    public List<Vector3Int> PathToNeighbor(Dictionary<Vector3Int, Vector3Int> reach, Vector3Int start, Vector3Int target,
+        System.Func<Vector3Int, bool> isFree = null)
     {
         Vector3Int best = default;
         int bestLen = int.MaxValue;
@@ -150,6 +175,7 @@ public class GridManager : MonoBehaviour
         {
             Vector3Int n = target + d;
             if (!reach.ContainsKey(n)) continue;
+            if (isFree != null && !isFree(n)) continue;
             int len = PathLength(reach, start, n);
             if (len < bestLen) { bestLen = len; best = n; found = true; }
         }
@@ -164,6 +190,53 @@ public class GridManager : MonoBehaviour
         }
         path.Reverse();
         return path;
+    }
+
+    // Шлях на саму клітинку. null — недосяжно.
+    public List<Vector3Int> PathTo(Dictionary<Vector3Int, Vector3Int> reach, Vector3Int start, Vector3Int target)
+    {
+        if (!reach.ContainsKey(target)) return null;
+        var path = new List<Vector3Int>();
+        Vector3Int c = target;
+        while (c != start)
+        {
+            path.Add(c);
+            c = reach[c];
+        }
+        path.Reverse();
+        return path;
+    }
+
+    public List<Vector3Int> PathFor(Dictionary<Vector3Int, Vector3Int> reach, Vector3Int start, AntTask task,
+        System.Func<Vector3Int, bool> isFree = null)
+    {
+        if (task.StandNextTo) return PathToNeighbor(reach, start, task.Cell, isFree);
+        if (isFree != null && !isFree(task.Cell)) return null;
+        return PathTo(reach, start, task.Cell);
+    }
+
+    // Шлях до найближчої вільної прохідної клітинки не далі maxSteps. null — немає.
+    public List<Vector3Int> PathToNearestFree(Vector3Int start, System.Func<Vector3Int, bool> isFree, int maxSteps)
+    {
+        var cameFrom = new Dictionary<Vector3Int, Vector3Int> { [start] = start };
+        var frontier = new Queue<(Vector3Int cell, int depth)>();
+        frontier.Enqueue((start, 0));
+
+        while (frontier.Count > 0)
+        {
+            var (cur, depth) = frontier.Dequeue();
+            if (cur != start && isFree(cur)) return PathTo(cameFrom, start, cur);
+            if (depth >= maxSteps) continue;
+
+            foreach (Vector3Int d in Dirs)
+            {
+                Vector3Int next = cur + d;
+                if (cameFrom.ContainsKey(next) || !IsWalkable(next)) continue;
+                cameFrom[next] = cur;
+                frontier.Enqueue((next, depth + 1));
+            }
+        }
+        return null;
     }
 
     private static int PathLength(Dictionary<Vector3Int, Vector3Int> reach, Vector3Int start, Vector3Int cell)

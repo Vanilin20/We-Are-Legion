@@ -1,13 +1,18 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Мураха, що сама бере завдання з черги: іде до клітинки й копає її.
+// Мураха: бере завдання з черги своєї групи, іде до місця й працює.
+// Ручне завдання від гравця виконує першим, поза чергою.
 [RequireComponent(typeof(Rigidbody2D))]
 public class AntAgent : MonoBehaviour
 {
     public enum State { Idle, Move, Work }
 
+    [Header("Група")]
+    [SerializeField] private AntGroup group = AntGroup.Builder;
+
     [Header("Стати (поки без конструктора)")]
+    [SerializeField] private int maxHp = 4;
     [Tooltip("Клітинок за секунду")]
     [SerializeField] private float speedCells = 2f;
     [Tooltip("Секунд на одну клітинку")]
@@ -16,15 +21,25 @@ public class AntAgent : MonoBehaviour
     [Header("Поведінка")]
     [SerializeField] private float searchInterval = 0.5f;
     [SerializeField] private float turnSpeed = 720f;
+    [Tooltip("Як далеко шукати вільну клітинку, щоб відійти від іншої мурахи")]
+    [SerializeField] private int sidestepRange = 6;
 
+    public AntGroup Group => group;
+    public int MaxHp => maxHp;
+    public int Hp { get; private set; }
+    public float DigTime => digTime;
     public State CurrentState { get; private set; } = State.Idle;
+    public AntTask CurrentTask => task;
+    public bool IsManual { get; private set; }
 
     private Animator anim;
     private GridManager grid;
+    private Colony colony;
+
+    private AntTask task;
+    private TaskQueue taskQueue; // з якої черги завдання; null — ручний перехід
     private List<Vector3Int> path;
     private int pathIndex;
-    private Vector3Int task;
-    private bool hasTask;
     private float workTimer;
     private float searchTimer;
 
@@ -34,24 +49,47 @@ public class AntAgent : MonoBehaviour
         var rb = GetComponent<Rigidbody2D>();
         rb.bodyType = RigidbodyType2D.Kinematic; // рухаємо самі, по клітинках
         rb.linearVelocity = Vector2.zero;
+        Hp = maxHp;
     }
 
     void Start()
     {
         grid = GridManager.Instance;
-        if (grid == null)
+        colony = Colony.Instance;
+        if (grid == null || colony == null)
         {
-            Debug.LogError("AntAgent: у сцені немає GridManager");
+            Debug.LogError("AntAgent: у сцені немає GridManager або Colony");
             enabled = false;
             return;
         }
-        transform.position = grid.CellCenter(grid.WorldToCell(transform.position));
+        colony.Register(this);
+        transform.position = grid.CellCenter(MyCell);
+    }
+
+    void OnDestroy()
+    {
+        if (colony != null) colony.Unregister(this);
     }
 
     void OnDisable()
     {
         DropTask();
     }
+
+    private Vector3Int MyCell => grid.WorldToCell(transform.position);
+
+    // Клітинка, яку мураха займає: де стоїть/працює, а в русі — куди йде.
+    public Vector3Int RestCell
+    {
+        get
+        {
+            if (grid == null) return new Vector3Int(int.MinValue, int.MinValue, 0);
+            if (CurrentState == State.Move && path != null && path.Count > 0) return path[path.Count - 1];
+            return MyCell;
+        }
+    }
+
+    private bool IsFreeForMe(Vector3Int cell) => !colony.IsReservedByOther(cell, this);
 
     void Update()
     {
@@ -65,19 +103,55 @@ public class AntAgent : MonoBehaviour
         if (anim != null) anim.SetBool("IsRunning", CurrentState == State.Move);
     }
 
+    // ---------- Команди ----------
+
+    // Ручне завдання від гравця. queue — черга, в якій лежить завдання (або null).
+    // false — туди не дійти.
+    public bool AssignManual(AntTask newTask, TaskQueue queue)
+    {
+        if (grid == null || newTask == null || !newTask.IsValid(grid)) return false;
+
+        var reach = grid.BuildReachMap(MyCell);
+        // спершу вільне місце; якщо всі зайняті — однаково йдемо (наказ гравця)
+        List<Vector3Int> newPath = grid.PathFor(reach, MyCell, newTask, IsFreeForMe)
+                                   ?? grid.PathFor(reach, MyCell, newTask);
+        if (newPath == null) return false;
+
+        DropTask();
+
+        if (queue != null)
+        {
+            AntAgent owner = queue.Owner(newTask);
+            if (owner != null && owner != this) owner.CancelTask();
+            queue.Claim(newTask, this);
+        }
+
+        Begin(newTask, queue, newPath, manual: true);
+        return true;
+    }
+
+    public void CancelTask() => DropTask();
+
+    // ---------- Стани ----------
+
     private void UpdateIdle()
     {
         searchTimer -= Time.deltaTime;
         if (searchTimer > 0f) return;
         searchTimer = searchInterval;
 
-        Vector3Int myCell = grid.WorldToCell(transform.position);
-        if (grid.DigQueue.TryTake(this, grid, myCell, out task, out path))
+        TaskQueue queue = colony.Queue(group);
+        if (queue.TryTake(this, grid, MyCell, out AntTask t, out List<Vector3Int> p))
         {
-            hasTask = true;
-            pathIndex = 0;
-            CurrentState = path.Count > 0 ? State.Move : State.Work;
-            workTimer = 0f;
+            Begin(t, queue, p, manual: false);
+            return;
+        }
+
+        // Без роботи й стоїмо на клітинці іншої мурахи — відходимо вбік.
+        if (colony.IsReservedByOther(MyCell, this))
+        {
+            List<Vector3Int> side = grid.PathToNearestFree(MyCell, IsFreeForMe, sidestepRange);
+            if (side != null) Begin(new MoveTask(side[side.Count - 1]), null, side, manual: false);
         }
     }
 
@@ -96,11 +170,7 @@ public class AntAgent : MonoBehaviour
         if ((transform.position - target).sqrMagnitude < 0.0001f)
         {
             pathIndex++;
-            if (pathIndex >= path.Count)
-            {
-                CurrentState = State.Work;
-                workTimer = 0f;
-            }
+            if (pathIndex >= path.Count) StartWork();
         }
     }
 
@@ -108,31 +178,60 @@ public class AntAgent : MonoBehaviour
     {
         if (!TaskStillValid()) { DropTask(); return; }
 
-        FaceTowards(grid.CellCenter(task));
+        if (task.StandNextTo) FaceTowards(grid.CellCenter(task.Cell));
         workTimer += Time.deltaTime;
-        if (workTimer < digTime) return;
+        if (workTimer < task.WorkTime(this)) return;
 
-        grid.Dig(task); // сам прибирає клітинку з черги
-        hasTask = false;
-        CurrentState = State.Idle;
-        searchTimer = 0f;
+        AntTask done = task;
+        TaskQueue doneQueue = taskQueue;
+        ClearTask();
+        done.Complete(this, grid);
+        if (doneQueue != null) doneQueue.Remove(done);
     }
 
-    // Гравець міг зняти позначку, поки мураха йшла.
+    // ---------- Службове ----------
+
+    private void Begin(AntTask t, TaskQueue queue, List<Vector3Int> p, bool manual)
+    {
+        task = t;
+        taskQueue = queue;
+        path = p;
+        pathIndex = 0;
+        IsManual = manual;
+        if (path.Count > 0) CurrentState = State.Move;
+        else StartWork();
+    }
+
+    private void StartWork()
+    {
+        CurrentState = State.Work;
+        workTimer = 0f;
+    }
+
+    // Гравець міг зняти позначку або віддати завдання іншій мурахі.
     private bool TaskStillValid()
     {
-        return hasTask && grid.DigQueue.IsTakenBy(task, this) && grid.HasWall(task);
+        if (task == null || !task.IsValid(grid)) return false;
+        return taskQueue == null || taskQueue.IsTakenBy(task, this);
     }
 
     private void DropTask()
     {
-        if (hasTask && grid != null) grid.DigQueue.Release(task, this);
-        hasTask = false;
+        if (task != null && taskQueue != null) taskQueue.Release(task, this);
+        bool wasMoving = task != null;
+        ClearTask();
+        // докручуємо до центру клітинки, щоб не застрягти між клітинками
+        if (wasMoving && grid != null) transform.position = grid.CellCenter(MyCell);
+    }
+
+    private void ClearTask()
+    {
+        task = null;
+        taskQueue = null;
         path = null;
+        IsManual = false;
         CurrentState = State.Idle;
         searchTimer = 0f;
-        // докручуємо до центру клітинки, щоб не застрягти між клітинками
-        if (grid != null) transform.position = grid.CellCenter(grid.WorldToCell(transform.position));
     }
 
     // Спрайт мурахи дивиться вгору, тому -90 (як у PlayerRotation).
