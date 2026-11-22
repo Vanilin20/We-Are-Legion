@@ -1,6 +1,14 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// Те, що займає клітинку, але не є мурахою: королева, яйце, жук.
+// Мурахи можуть проходити крізь таку клітинку, але не зупиняються на ній.
+public interface ICellBlocker
+{
+    GridManager BlockGrid { get; }
+    Vector3Int BlockCell { get; }
+}
+
 // Колонія: усі мурахи й черги завдань по групах. Стежить за поразкою.
 public class Colony : MonoBehaviour
 {
@@ -11,6 +19,7 @@ public class Colony : MonoBehaviour
 
     private readonly Dictionary<AntGroup, TaskQueue> queues = new Dictionary<AntGroup, TaskQueue>();
     private readonly List<AntAgent> ants = new List<AntAgent>();
+    private readonly List<ICellBlocker> blockers = new List<ICellBlocker>();
     private bool hadAnts;
     private bool gameOver;
 
@@ -50,13 +59,29 @@ public class Colony : MonoBehaviour
 
     public void Unregister(AntAgent ant) => ants.Remove(ant);
 
+    public void AddBlocker(ICellBlocker b)
+    {
+        if (b != null && !blockers.Contains(b)) blockers.Add(b);
+    }
+
+    public void RemoveBlocker(ICellBlocker b) => blockers.Remove(b);
+
+    // Чи стоїть на клітинці королева, яйце або жук (крім ignore).
+    public bool IsBlocked(GridManager grid, Vector3Int cell, ICellBlocker ignore = null)
+    {
+        foreach (ICellBlocker b in blockers)
+            if (b != ignore && b.BlockGrid == grid && b.BlockCell == cell) return true;
+        return false;
+    }
+
     // Чи зайнята клітинка іншою мурахою (вона там стоїть, працює або вже туди йде).
     // Мурахи в русі можуть проходити одна крізь одну — займають лише місце, де зупиняться.
+    // Королева, яйця й жуки теж займають свої клітинки.
     public bool IsReservedByOther(GridManager grid, Vector3Int cell, AntAgent me)
     {
         foreach (AntAgent a in ants)
             if (a != me && a.enabled && a.RestGrid == grid && a.RestCell == cell) return true;
-        return false;
+        return IsBlocked(grid, cell);
     }
 
     public int CountIn(AntGroup group)

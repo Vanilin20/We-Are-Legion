@@ -97,12 +97,36 @@ public class GridManager : MonoBehaviour
     }
 
     public bool InBounds(Vector3Int cell) => Contains(walkBounds, cell);
+    public BoundsInt CellBounds => walkBounds;
 
     public bool HasWall(Vector3Int cell) => wallTilemap != null && wallTilemap.HasTile(cell);
 
     public bool IsWalkable(Vector3Int cell)
     {
         return Contains(walkBounds, cell) && !HasWall(cell) && floorTilemap.HasTile(cell);
+    }
+
+    // Найближча прохідна клітинка (по колу, що розширюється). false — у межах maxRadius немає.
+    public bool TryNearestWalkable(Vector3Int from, int maxRadius, out Vector3Int result)
+    {
+        result = from;
+        if (IsWalkable(from)) return true;
+        for (int r = 1; r <= maxRadius; r++)
+        {
+            bool found = false;
+            float best = float.MaxValue;
+            for (int x = -r; x <= r; x++)
+            for (int y = -r; y <= r; y++)
+            {
+                if (Mathf.Max(Mathf.Abs(x), Mathf.Abs(y)) != r) continue; // лише край квадрата
+                var c = new Vector3Int(from.x + x, from.y + y, 0);
+                if (!IsWalkable(c)) continue;
+                float d = x * x + y * y;
+                if (d < best) { best = d; result = c; found = true; }
+            }
+            if (found) return true;
+        }
+        return false;
     }
 
     // Крайній ряд стін не копаємо, щоб мурахи не вийшли за мапу.

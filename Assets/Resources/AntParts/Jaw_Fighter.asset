@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a02ebff627740d439d93d5be477231e, type: 3}
+  m_Name: Jaw_Fighter
+  m_EditorClassIdentifier: Assembly-CSharp::AntPart
+  slot: 2
+  displayName: FIGHTER
+  isBasic: 0
+  order: 2
+  color: {r: 0.95, g: 0.3, b: 0.28, a: 1}
+  hp: 4
+  speedBonus: 0
+  speed: 2
+  carry: 2
+  digTime: 1.5
+  damage: 2

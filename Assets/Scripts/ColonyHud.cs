@@ -29,8 +29,23 @@ public class ColonyHud : MonoBehaviour
                  + "   WORK " + colony.CountIn(AntGroup.Worker)
                  + "   WAR " + colony.CountIn(AntGroup.Warrior);
 
-        AntAgent sel = AntSelection.Instance != null ? AntSelection.Instance.Selected : null;
-        if (sel != null)
+        AntQueen queen = AntQueen.Instance;
+        if (queen != null)
+        {
+            s += "\nANTS " + colony.Ants.Count + "/" + queen.MaxAnts;
+            if (queen.EggsCount > 0) s += "   EGGS " + queen.EggsCount;
+            if (queen.OrdersCount > 0) s += "   QUEUE " + queen.OrdersCount + " (NEXT EGG " + Mathf.CeilToInt(queen.LayCooldown) + "s)";
+        }
+
+        AntSelection selection = AntSelection.Instance;
+        AntAgent sel = selection != null ? selection.Selected : null;
+        if (sel != null && selection.Count > 1)
+        {
+            int hp = 0, max = 0;
+            foreach (AntAgent a in selection.SelectedAnts) { hp += a.Hp; max += a.MaxHp; }
+            s += "\nSQUAD " + selection.Count + "  HP " + hp + "/" + max;
+        }
+        else if (sel != null)
             s += "\n" + GroupName(sel.Group) + "  HP " + sel.Hp + "/" + sel.MaxHp + "  " + StateName(sel)
                + (sel.CargoCount > 0 ? "  CARRY " + sel.CargoCount + "/" + sel.CarryCapacity : "")
                + (sel.Hungry ? "  HUNGRY" : "");

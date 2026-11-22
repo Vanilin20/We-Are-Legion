@@ -60,6 +60,8 @@ public class TaskQueue
             AntTask t = order[i];
             if (takenBy.ContainsKey(t)) continue;
             if (!t.IsValid(ant)) continue;
+            // їжу під охороною жука самі не беремо — лише за наказом гравця
+            if (t is PickupTask && EnemyBeetle.Guards(t.Grid, t.Cell)) continue;
 
             // недосяжно або всі місця біля завдання зайняті іншими мурахами — відкладаємо
             Route r = router.Find(antGrid, antCell, t, isFree);

@@ -3,6 +3,7 @@ using UnityEngine;
 
 // Мураха: бере завдання з черги своєї групи, іде до місця (можливо, через вхід в іншу локацію) і працює.
 // Ручне завдання від гравця виконує першим, поза чергою.
+// Стати беруться зі збірки конструктора (ApplyBuild); мурахи, поставлені в сцену, — базові зі статами з інспектора.
 // Їсть зі складу; голодна втрачає здоров'я; на нулі гине, вантаж падає на землю.
 [RequireComponent(typeof(Rigidbody2D))]
 public class AntAgent : MonoBehaviour
@@ -20,6 +21,10 @@ public class AntAgent : MonoBehaviour
     [SerializeField] private float digTime = 1f;
     [Tooltip("Скільки предметів несе за раз")]
     [SerializeField] private int carryCapacity = 2;
+    [Tooltip("Шкода за удар")]
+    [SerializeField] private int damage = 1;
+    [Tooltip("Секунд між ударами (у GDD усі мурахи б'ють раз на 1 с)")]
+    [SerializeField] private float attackInterval = 1f;
 
     [Header("Голод")]
     [Tooltip("Раз на скільки секунд мураха з'їдає 1 їжу")]
@@ -40,10 +45,17 @@ public class AntAgent : MonoBehaviour
     public int Hp { get; private set; }
     public bool Hungry { get; private set; }
     public float DigTime => digTime;
+    public float SpeedCells => speedCells;
+    public int AttackDamage => damage;
+    public float AttackInterval => attackInterval;
+    public AntBuild Build { get; private set; }
     public State CurrentState { get; private set; } = State.Idle;
     public AntTask CurrentTask => task;
     public bool IsManual { get; private set; }
     public GridManager Grid => grid;
+    public bool IsAlive => !dead && enabled;
+    // Клітинка, де мураха зараз (у русі — найближча).
+    public Vector3Int CurrentCell => grid != null ? MyCell : new Vector3Int(int.MinValue, int.MinValue, 0);
 
     // Вантаж: кожен предмет — скільки їжі в ньому (крихта 1, м'ясо 8).
     private readonly List<int> cargo = new List<int>();
@@ -56,6 +68,7 @@ public class AntAgent : MonoBehaviour
     private GridManager grid;
     private Colony colony;
     private AntStatusView status;
+    private AntLook look;
 
     private AntTask task;
     private TaskQueue taskQueue; // з якої черги завдання; null — своє (відійти, віднести)
@@ -66,7 +79,11 @@ public class AntAgent : MonoBehaviour
     private float searchTimer;
     private float eatTimer;
     private float flashTimer;
+    private float repeatCooldown; // до наступного удару (не скидається, коли мураха доганяє ціль)
     private bool dead;
+    // Куди вела ціль, коли будували маршрут (для рухомих цілей).
+    private GridManager routedGrid;
+    private Vector3Int routedCell;
 
     void Awake()
     {
@@ -91,7 +108,24 @@ public class AntAgent : MonoBehaviour
         }
         colony.Register(this);
         transform.position = grid.CellCenter(MyCell);
+        if (Build == null) Build = AntBuild.Basic;
+        look = AntLook.Attach(this);
+        look.Apply(Build);
         status = AntStatusView.Create(this);
+    }
+
+    // Стати й група з конструктора. Викликати одразу після Instantiate (до Start).
+    public void ApplyBuild(AntBuild build, AntGroup newGroup)
+    {
+        Build = build;
+        group = newGroup;
+        maxHp = build.Hp;
+        speedCells = build.Speed;
+        digTime = build.DigTime;
+        carryCapacity = build.Carry;
+        damage = build.Damage;
+        Hp = maxHp;
+        if (look != null) look.Apply(build);
     }
 
     void OnDestroy()
@@ -102,7 +136,8 @@ public class AntAgent : MonoBehaviour
 
     void OnDisable()
     {
-        DropTask();
+        // При вивантаженні сцени сітка вже може бути знищена — не вирівнюємось по клітинці.
+        DropTask(snap: false);
     }
 
     private Vector3Int MyCell => grid.WorldToCell(transform.position);
@@ -127,6 +162,7 @@ public class AntAgent : MonoBehaviour
         if (dead) return;
 
         UpdateHunger();
+        if (repeatCooldown > 0f) repeatCooldown -= Time.deltaTime;
 
         switch (CurrentState)
         {
@@ -184,17 +220,32 @@ public class AntAgent : MonoBehaviour
 
     // ---------- Здоров'я ----------
 
-    public void Damage(int amount)
+    // source — хто вдарив (для журналу); null — голод.
+    public void Damage(int amount, Object source = null)
     {
         if (dead || amount <= 0) return;
         Hp = Mathf.Max(0, Hp - amount);
         flashTimer = 0.25f;
-        if (Hp == 0) Die();
+        if (Hp == 0) { Die(source); return; }
+
+        // Воїн без наказу гравця дає здачі жуку, що його б'є.
+        if (source is EnemyBeetle beetle && group == AntGroup.Warrior && !IsManual && !(task is AttackTask))
+        {
+            var attack = new AttackTask(beetle);
+            var router = new Router();
+            Route r = router.Find(grid, MyCell, attack, IsFree) ?? router.Find(grid, MyCell, attack, null);
+            if (r != null)
+            {
+                DropTask();
+                Begin(attack, null, r, manual: false);
+            }
+        }
     }
 
-    private void Die()
+    private void Die(Object killer)
     {
         dead = true;
+        Debug.Log(name + " (" + group + ") загинула: " + (killer != null ? killer.name : "голод"));
         DropTask();
 
         // вантаж падає на землю
@@ -203,8 +254,7 @@ public class AntAgent : MonoBehaviour
             FoodItem.Spawn(grid, cell, amount, amount > 1 ? "Meat" : "Crumb");
         cargo.Clear();
 
-        if (AntSelection.Instance != null && AntSelection.Instance.Selected == this)
-            AntSelection.Instance.Deselect();
+        if (AntSelection.Instance != null) AntSelection.Instance.Remove(this);
 
         Destroy(gameObject);
     }
@@ -229,13 +279,14 @@ public class AntAgent : MonoBehaviour
 
     private void UpdateFlash()
     {
-        if (body == null) return;
+        float k = 0f;
         if (flashTimer > 0f)
         {
             flashTimer -= Time.deltaTime;
-            body.color = Color.Lerp(Color.white, Color.red, flashTimer / 0.25f);
+            k = Mathf.Clamp01(flashTimer / 0.25f);
         }
-        else if (body.color != Color.white) body.color = Color.white;
+        if (body != null) body.color = Color.Lerp(Color.white, Color.red, k);
+        if (look != null) look.SetFlash(k);
     }
 
     // ---------- Стани ----------
@@ -303,6 +354,7 @@ public class AntAgent : MonoBehaviour
         {
             pathIndex++;
             if (pathIndex >= leg.Path.Count) EndOfLeg();
+            else if (TargetShifted() && legIndex == route.Legs.Count - 1 && !Reroute()) DropTask();
         }
     }
 
@@ -329,7 +381,24 @@ public class AntAgent : MonoBehaviour
     {
         if (!TaskStillValid()) { DropTask(); return; }
 
+        // Ціль відійшла — доганяємо.
+        if (task.TargetMoves && !NextToTarget())
+        {
+            if (!Reroute()) DropTask();
+            return;
+        }
+
         if (task.StandNextTo) FaceTowards(grid.CellCenter(task.Cell));
+
+        // Удари: перший — одразу, далі раз на WorkTime (як у GDD: «б'ють раз на 1 с»).
+        if (task.Repeating)
+        {
+            if (repeatCooldown > 0f) return;
+            repeatCooldown = task.WorkTime(this);
+            task.Complete(this); // чи ціль ще жива — перевіримо наступного кадру
+            return;
+        }
+
         workTimer += Time.deltaTime;
         if (workTimer < task.WorkTime(this)) return;
 
@@ -347,12 +416,42 @@ public class AntAgent : MonoBehaviour
     {
         task = t;
         taskQueue = queue;
+        IsManual = manual;
+        UseRoute(r);
+    }
+
+    private void UseRoute(Route r)
+    {
         route = r;
         legIndex = 0;
         pathIndex = 0;
-        IsManual = manual;
+        routedGrid = task.Grid;
+        routedCell = task.Cell;
         if (r.Legs.Count == 1 && r.Legs[0].Path.Count == 0) StartWork();
         else CurrentState = State.Move;
+    }
+
+    // Новий маршрут до того самого завдання (ціль зрушила). false — туди вже не дійти.
+    private bool Reroute()
+    {
+        var router = new Router();
+        Route r = router.Find(grid, MyCell, task, IsFree) ?? router.Find(grid, MyCell, task, null);
+        if (r == null) return false;
+        UseRoute(r);
+        return true;
+    }
+
+    private bool TargetShifted()
+    {
+        return task != null && task.TargetMoves && (task.Grid != routedGrid || task.Cell != routedCell);
+    }
+
+    // Стоїмо впритул до цілі (по сторонах або навскіс).
+    private bool NextToTarget()
+    {
+        if (task.Grid != grid) return false;
+        Vector3Int d = task.Cell - MyCell;
+        return Mathf.Abs(d.x) <= 1 && Mathf.Abs(d.y) <= 1;
     }
 
     private void StartWork()
@@ -368,13 +467,13 @@ public class AntAgent : MonoBehaviour
         return taskQueue == null || taskQueue.IsTakenBy(task, this);
     }
 
-    private void DropTask()
+    private void DropTask(bool snap = true)
     {
         if (task != null && taskQueue != null) taskQueue.Release(task, this);
         bool hadTask = task != null;
         ClearTask();
         // докручуємо до центру клітинки, щоб не застрягти між клітинками
-        if (hadTask && grid != null) transform.position = grid.CellCenter(MyCell);
+        if (snap && hadTask && grid != null) transform.position = grid.CellCenter(MyCell);
     }
 
     private void ClearTask()
