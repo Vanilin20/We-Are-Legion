@@ -345,7 +345,7 @@ public class EnemyBeetle : MonoBehaviour, ICellBlocker
         body = v.AddComponent<SpriteRenderer>();
         body.sortingOrder = sortingOrder;
 
-        // арт з Art/beetle.aseprite (2 кадри ходи), якщо спрайт не призначено вручну
+        // арт beetle_0/beetle_1 з Resources/Art (2 кадри ходи), якщо спрайт не призначено вручну
         if (sprite == null && GameArt.Get("beetle_0") != null)
         {
             walkFrames = new[] { GameArt.Get("beetle_0"), GameArt.Get("beetle_1") ?? GameArt.Get("beetle_0") };

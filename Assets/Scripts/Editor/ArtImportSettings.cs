@@ -8,11 +8,20 @@ public class ArtImportSettings : AssetPostprocessor
     private const string Folder = "Assets/Resources/Art/";
 
     // Змінив налаштування нижче — збільш версію, і Unity переімпортує арт.
-    public override uint GetVersion() => 2;
+    public override uint GetVersion() => 3;
+
+    // Основна модель мурахи: лише Read/Write, щоб AntRecolor міг перефарбувати кадри (решту не чіпаємо).
+    private const string AntFolder = "Assets/ant/";
 
     void OnPreprocessTexture()
     {
-        if (!assetPath.Replace('\\', '/').StartsWith(Folder)) return;
+        string path = assetPath.Replace('\\', '/');
+        if (path.StartsWith(AntFolder))
+        {
+            ((TextureImporter)assetImporter).isReadable = true;
+            return;
+        }
+        if (!path.StartsWith(Folder)) return;
 
         var ti = (TextureImporter)assetImporter;
         ti.textureType = TextureImporterType.Sprite;

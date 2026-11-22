@@ -129,7 +129,7 @@ public static class WeAreLegionAutoTest
 
         // --- Вікно конструктора (знімок із превʼю воїна)
         ConstructorWindow.Instance.Show(Make("Body_Armored", "Legs_Basic", "Jaw_Fighter"), AntGroup.Warrior);
-        yield return null;
+        foreach (object o in Frames(2)) yield return o;
         Check(ConstructorWindow.Instance.IsOpen, "вікно конструктора відкривається");
         foreach (object o in Shot("constructor")) yield return o;
         ConstructorWindow.Instance.Close();
@@ -158,8 +158,7 @@ public static class WeAreLegionAutoTest
         Check(storage.Food == food1 - 33, "їжа знята одразу: " + food1 + " → " + storage.Food + " (очікував -33)");
 
         // --- Яйця: перше одразу, наступне не раніше ніж через 20 с
-        yield return null;
-        yield return null;
+        foreach (object o in Frames(2)) yield return o;
         Check(queen.EggsCount == 1 && queen.OrdersCount == 2, "одразу одне яйце, два в черзі (eggs " + queen.EggsCount + ", queue " + queen.OrdersCount + ")");
         float firstEgg = Time.time;
 
@@ -267,13 +266,19 @@ public static class WeAreLegionAutoTest
     {
         float scale = Time.timeScale;
         Time.timeScale = 0f;
-        yield return null;
+        foreach (object o in Frames(2)) yield return o;
         string path = Path.Combine(LogsDir, "shot_" + name + ".png");
         ScreenCapture.CaptureScreenshot(path);
-        float t0 = Time.realtimeSinceStartup;
-        while (Time.realtimeSinceStartup - t0 < 0.5f) yield return null;
+        foreach (object o in Frames(3)) yield return o; // знімок пишеться в кінці кадру
         Time.timeScale = scale;
         Line("  знімок: " + path);
+    }
+
+    // Чекати n кадрів гри (тік редактора — не кадр гри: їх може бути кілька за кадр).
+    private static IEnumerable Frames(int n)
+    {
+        int target = Time.frameCount + n;
+        while (Time.frameCount < target) yield return null;
     }
 
     private static void LookAt(Vector3 world)

@@ -28,7 +28,7 @@ public class ConstructorWindow : MonoBehaviour
     private readonly Dictionary<AntGroup, Image> groupButtons = new Dictionary<AntGroup, Image>();
     private TMP_Text statsText, costText, queueText, messageText;
     private Image orderButton;
-    private Image previewLegs, previewBody, previewJaw;
+    private Image preview;
     private float previewTime;
     private float messageTimer;
     private float refreshTimer;
@@ -80,12 +80,14 @@ public class ConstructorWindow : MonoBehaviour
         refreshTimer -= Time.unscaledDeltaTime;
         if (refreshTimer <= 0f) Refresh(); // їжа й черга змінюються самі
 
-        // превʼю біжить на місці
-        if (previewLegs != null)
+        // превʼю: основна модель у кольорах збірки, біжить на місці
+        if (preview != null)
         {
-            previewTime += Time.unscaledDeltaTime * 10f * Mathf.Max(0.5f, build.Speed / 2f);
-            Sprite legs = build.Legs.Sprite(1 + (int)previewTime % 4);
-            if (legs != null) previewLegs.sprite = legs;
+            previewTime += Time.unscaledDeltaTime * 8f * Mathf.Max(0.5f, build.Speed / 2f);
+            Sprite frame = PreviewFrame((int)previewTime);
+            Sprite shown = frame != null ? AntRecolor.Get(frame, build) ?? frame : null;
+            preview.enabled = shown != null;
+            if (shown != null) preview.sprite = shown;
         }
     }
 
@@ -149,13 +151,6 @@ public class ConstructorWindow : MonoBehaviour
         foreach (var kv in groupButtons)
             SetPicked(kv.Value, GroupColor(kv.Key), kv.Key == group);
 
-        if (previewBody != null)
-        {
-            previewBody.sprite = build.Body.Sprite();
-            previewJaw.sprite = build.Jaw.Sprite();
-            if (previewLegs.sprite == null) previewLegs.sprite = build.Legs.Sprite(0);
-        }
-
         statsText.text = "HP " + build.Hp
                        + "    SPEED " + Num(build.Speed)
                        + "    CARRY " + build.Carry
@@ -201,8 +196,7 @@ public class ConstructorWindow : MonoBehaviour
         }
 
         // місце праворуч під превʼю мурахи
-        bool hasArt = build.Body.Sprite() != null;
-        if (hasArt && panelSize.x < 820f) panelSize = new Vector2(820f, panelSize.y);
+        if (panelSize.x < 820f) panelSize = new Vector2(820f, panelSize.y);
 
         panel = new GameObject("ConstructorWindow", typeof(RectTransform));
         panel.transform.SetParent(transform, false);
@@ -239,10 +233,8 @@ public class ConstructorWindow : MonoBehaviour
             rowY -= btnH + 14f;
         }
 
-        statsText = hasArt
-            ? Label("", new Vector2(-110f, rowY + 4f), new Vector2(w - 260f, 34f), 20f, TextAlignmentOptions.Center)
-            : Label("", new Vector2(0f, rowY + 4f), new Vector2(w - 40f, 34f), 20f, TextAlignmentOptions.Center);
-        if (hasArt) BuildPreview(new Vector2(w / 2f - 110f, top - 152f), 150f);
+        statsText = Label("", new Vector2(-110f, rowY + 4f), new Vector2(w - 260f, 34f), 20f, TextAlignmentOptions.Center);
+        BuildPreview(new Vector2(w / 2f - 110f, top - 152f), 150f);
         rowY -= 50f;
 
         // група
@@ -282,9 +274,22 @@ public class ConstructorWindow : MonoBehaviour
         bg.color = new Color(0.18f, 0.08f, 0.06f); // як земля мурашника
         bg.raycastTarget = false;
 
-        previewLegs = PreviewLayer(frame.transform, size - 22f);
-        previewBody = PreviewLayer(frame.transform, size - 22f);
-        previewJaw = PreviewLayer(frame.transform, size - 22f);
+        preview = PreviewLayer(frame.transform, size - 22f);
+    }
+
+    // Кадри бігу основної моделі (ті, що вже траплялись у грі); якщо їх ще немає — стоячий кадр.
+    private static Sprite PreviewFrame(int tick)
+    {
+        var run = new System.Collections.Generic.List<Sprite>();
+        Sprite stand = null;
+        foreach (Sprite s in AntRecolor.Frames)
+        {
+            if (s.name.Contains("run")) run.Add(s);
+            else if (stand == null) stand = s;
+        }
+        if (run.Count == 0) return stand;
+        run.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+        return run[tick % run.Count];
     }
 
     private static Image PreviewLayer(Transform parent, float size)

@@ -1,8 +1,16 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Спрайти з Assets/Resources/Art (джерела — Art/*.aseprite). Назва спрайта = назва шару в Aseprite.
-// Якщо спрайта немає — повертає null, і код малює стару заготовку.
+// Спрайти з Assets/Resources/Art за назвою файлу. Поки арту немає — повертає null, і код малює заготовку.
+// Щоб замінити заготовку своїм малюнком, поклади PNG з такою назвою в Assets/Resources/Art
+// (імпорт налаштується сам: ArtImportSettings — Point, без стиснення, 100 px на одиницю):
+//   storage       склад, полотно = 1 клітинка (32×32)
+//   crumb_0..2    крихта (будь-яка з трьох), 1 клітинка;   meat — м'ясо жука, 1 клітинка
+//   queen         королева, полотно = 1.5 клітинки (48×48)
+//   egg           яйце, пів клітинки (16×16), біле — підфарбовується кольором тіла
+//   beetle_0, beetle_1   жук (дивиться вгору), 2 кадри ходи
+//   icon_hunger   значок голоду;   hp_back — рамка смужки HP (18×4, усередині 16×2)
+//   cargo_crumb, cargo_meat   вантаж над головою мурахи
 public static class GameArt
 {
     private static readonly Dictionary<string, Sprite> cache = new Dictionary<string, Sprite>();
