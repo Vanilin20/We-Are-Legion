@@ -83,7 +83,9 @@ public class AntQueen : MonoBehaviour, ICellBlocker
             Debug.LogWarning("AntQueen: поруч немає розкопаної клітинки — постав королеву в кімнату");
         Cell = free;
         transform.position = Grid.CellCenter(Cell);
-        PlaceholderSprites.Ensure(gameObject, true, placeholderColor, Grid.CellWorldSize * placeholderSizeCells, 1);
+        // арт 48×48 = півтори клітинки
+        if (!GameArt.ApplyIfEmpty(gameObject, "queen", Grid.CellWorldSize * 1.5f, 1))
+            PlaceholderSprites.Ensure(gameObject, true, placeholderColor, Grid.CellWorldSize * placeholderSizeCells, 1);
 
         Colony.Instance.AddBlocker(this);
         PrepareTemplate();

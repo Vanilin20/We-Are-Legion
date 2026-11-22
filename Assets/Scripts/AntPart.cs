@@ -19,8 +19,10 @@ public class AntPart : ScriptableObject
     public bool isBasic;
     [Tooltip("Порядок кнопки в рядку конструктора")]
     public int order;
-    [Tooltip("Колір кнопки й мітки на мурасі")]
+    [Tooltip("Колір кнопки в конструкторі")]
     public Color color = Color.white;
+    [Tooltip("Шар в Art/ant_parts.aseprite (спрайт у Resources/Art). Порожньо — ant_<назва ассета>, напр. ant_body_simple")]
+    public string artName;
 
     [Header("Тіло")]
     public int hp = 4;
@@ -40,6 +42,14 @@ public class AntPart : ScriptableObject
     public int damage = 1;
 
     public int Cost => isBasic ? 0 : AntBuild.ExtraPartCost;
+
+    public string ArtName => string.IsNullOrEmpty(artName) ? "ant_" + name.ToLowerInvariant() : artName;
+
+    // Ноги мають кадри: 0 — стоїть, 1..4 — біг.
+    public Sprite Sprite(int frame = 0)
+    {
+        return slot == AntPartSlot.Legs ? GameArt.Get(ArtName + "_" + frame) : GameArt.Get(ArtName);
+    }
 }
 
 // Зібрана мураха: по одній частині в кожному слоті. Стати рахуються з частин.

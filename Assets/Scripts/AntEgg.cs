@@ -42,11 +42,21 @@ public class AntEgg : MonoBehaviour, ICellBlocker
     {
         var shell = new GameObject("Shell");
         shell.transform.SetParent(transform, false);
-        shell.transform.localScale = new Vector3(0.38f, 0.5f, 1f) * cell;
         var sr = shell.AddComponent<SpriteRenderer>();
-        sr.sprite = PlaceholderSprites.Circle;
-        sr.color = Color.Lerp(new Color(0.97f, 0.95f, 0.88f), Build.Body.color, 0.25f);
         sr.sortingOrder = 1;
+        Sprite art = GameArt.Get("egg");
+        if (art != null)
+        {
+            sr.sprite = art; // 16×16 = пів клітинки, з відтінком кольору тіла
+            shell.transform.localScale = Vector3.one * (0.5f * cell / art.bounds.size.x);
+            sr.color = Color.Lerp(Color.white, Build.Body.color, 0.3f);
+        }
+        else
+        {
+            shell.transform.localScale = new Vector3(0.38f, 0.5f, 1f) * cell;
+            sr.sprite = PlaceholderSprites.Circle;
+            sr.color = Color.Lerp(new Color(0.97f, 0.95f, 0.88f), Build.Body.color, 0.25f);
+        }
 
         bar = WorldBar.Create(transform, new Vector3(0f, 0.42f * cell, 0f), 0.6f * cell, 0.07f * cell,
             new Color(0.95f, 0.9f, 0.5f), 4);

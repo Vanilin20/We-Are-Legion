@@ -127,10 +127,11 @@ public static class WeAreLegionAutoTest
         DumpSurface();
         Snapshot("старт");
 
-        // --- Вікно конструктора
-        ConstructorWindow.Instance.Open();
+        // --- Вікно конструктора (знімок із превʼю воїна)
+        ConstructorWindow.Instance.Show(Make("Body_Armored", "Legs_Basic", "Jaw_Fighter"), AntGroup.Warrior);
         yield return null;
         Check(ConstructorWindow.Instance.IsOpen, "вікно конструктора відкривається");
+        foreach (object o in Shot("constructor")) yield return o;
         ConstructorWindow.Instance.Close();
 
         // --- Збірки й ціни з GDD
@@ -168,6 +169,8 @@ public static class WeAreLegionAutoTest
         Check(queen.EggsCount == 1, "до 20 с друге яйце не з'явилось (eggs " + queen.EggsCount + ", t " + (Time.time - firstEgg).ToString("0.0") + ")");
         while (queen.EggsCount < 2 && Time.time - firstEgg < 26f) yield return null;
         Check(queen.EggsCount == 2 && Time.time - firstEgg >= 19.9f, "друге яйце через " + (Time.time - firstEgg).ToString("0.0") + " с (eggs " + queen.EggsCount + ")");
+        LookAt(queen.transform.position);
+        foreach (object o in Shot("queen_eggs")) yield return o;
 
         // вилуплення першого — через 30 с після відкладання
         while (Time.time - firstEgg < 29f) yield return null;
@@ -186,6 +189,8 @@ public static class WeAreLegionAutoTest
         Check(deathCount == 0, "за " + Time.time.ToString("0") + " с гри жодна мураха не загинула (вільна їжа без бою)");
         Check(colony.Ants.Count >= antsBefore + 3 - Deaths(), "мурах стало більше: " + antsBefore + " → " + colony.Ants.Count);
         Snapshot("після вилуплення");
+        LookAt(queen.transform.position);
+        foreach (object o in Shot("hatched")) yield return o;
 
         // --- Ліміт 50
         int pop = queen.Population;
@@ -211,6 +216,7 @@ public static class WeAreLegionAutoTest
         Vector3Int beetleCell = beetle.Cell;
         GridManager surface = beetle.Grid;
         float attackStart = Time.time;
+        bool battleShot = false;
         float nextLog = 0f;
         while (beetle != null && Time.time - attackStart < 90f)
         {
@@ -224,6 +230,13 @@ public static class WeAreLegionAutoTest
                 Line(sb.ToString());
             }
             beetleCell = beetle.Cell;
+            if (!battleShot && beetle.Hp < beetle.MaxHp)
+            {
+                battleShot = true;
+                LookAt(beetle.transform.position);
+                foreach (object o in Shot("battle")) yield return o;
+                continue;
+            }
             yield return null;
         }
         Check(beetle == null, "жука переможено за " + (Time.time - attackStart).ToString("0") + " с гри");
@@ -234,6 +247,7 @@ public static class WeAreLegionAutoTest
         foreach (FoodItem f in Object.FindObjectsByType<FoodItem>(FindObjectsSortMode.None))
             if (f.Amount == 8 && f.Grid == surface) meat = true;
         Check(meat, "лишилось м'ясо +8");
+        foreach (object o in Shot("meat")) yield return o;
         Check(EnemyBeetle.All.Count == 2, "жуків стало 2");
 
         // --- Відродження через 120 с
@@ -247,6 +261,27 @@ public static class WeAreLegionAutoTest
     }
 
     // ---------- Допоміжне ----------
+
+    // Знімок вікна гри в Logs/shot_<name>.png (час на мить зупиняється, щоб кадр не змазався).
+    private static IEnumerable Shot(string name)
+    {
+        float scale = Time.timeScale;
+        Time.timeScale = 0f;
+        yield return null;
+        string path = Path.Combine(LogsDir, "shot_" + name + ".png");
+        ScreenCapture.CaptureScreenshot(path);
+        float t0 = Time.realtimeSinceStartup;
+        while (Time.realtimeSinceStartup - t0 < 0.5f) yield return null;
+        Time.timeScale = scale;
+        Line("  знімок: " + path);
+    }
+
+    private static void LookAt(Vector3 world)
+    {
+        Camera cam = Camera.main;
+        if (cam == null) return;
+        cam.transform.position = new Vector3(world.x, world.y, cam.transform.position.z);
+    }
 
     private static int deathCount;
     private static int Deaths() => deathCount;

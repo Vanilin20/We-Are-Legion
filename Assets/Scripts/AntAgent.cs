@@ -62,6 +62,7 @@ public class AntAgent : MonoBehaviour
     public int CargoCount => cargo.Count;
     public int CarryCapacity => carryCapacity;
     public bool CanCarryMore => cargo.Count < carryCapacity;
+    public int CargoAmountAt(int i) => cargo[i];
 
     private Animator anim;
     private SpriteRenderer body;

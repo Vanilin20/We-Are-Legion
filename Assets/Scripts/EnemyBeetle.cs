@@ -71,6 +71,8 @@ public class EnemyBeetle : MonoBehaviour, ICellBlocker
     private SpriteRenderer head;
     private WorldBar bar;
     private Quaternion wantRotation = Quaternion.identity;
+    private Sprite[] walkFrames;
+    private float walkTime;
     private Vector3 knock;
 
     // Чи стереже живий жук цю клітинку (у радіусі охорони від своєї точки або від того місця, де він зараз).
@@ -342,6 +344,13 @@ public class EnemyBeetle : MonoBehaviour, ICellBlocker
 
         body = v.AddComponent<SpriteRenderer>();
         body.sortingOrder = sortingOrder;
+
+        // арт з Art/beetle.aseprite (2 кадри ходи), якщо спрайт не призначено вручну
+        if (sprite == null && GameArt.Get("beetle_0") != null)
+        {
+            walkFrames = new[] { GameArt.Get("beetle_0"), GameArt.Get("beetle_1") ?? GameArt.Get("beetle_0") };
+            sprite = walkFrames[0];
+        }
         if (sprite != null)
         {
             body.sprite = sprite;
@@ -374,6 +383,14 @@ public class EnemyBeetle : MonoBehaviour, ICellBlocker
     private void UpdateVisual()
     {
         visual.localRotation = Quaternion.RotateTowards(visual.localRotation, wantRotation, turnSpeed * Time.deltaTime);
+
+        // хода: перебираємо кадри, поки йде
+        if (walkFrames != null)
+        {
+            bool moving = path != null && pathIndex < path.Count;
+            if (moving) walkTime += Time.deltaTime * 6f * speedCells / 1.5f;
+            body.sprite = walkFrames[moving ? (int)walkTime % walkFrames.Length : 0];
+        }
 
         knock = Vector3.MoveTowards(knock, Vector3.zero, cell * Time.deltaTime);
         visual.localPosition = knock;

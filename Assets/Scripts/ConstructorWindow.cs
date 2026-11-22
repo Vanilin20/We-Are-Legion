@@ -28,6 +28,8 @@ public class ConstructorWindow : MonoBehaviour
     private readonly Dictionary<AntGroup, Image> groupButtons = new Dictionary<AntGroup, Image>();
     private TMP_Text statsText, costText, queueText, messageText;
     private Image orderButton;
+    private Image previewLegs, previewBody, previewJaw;
+    private float previewTime;
     private float messageTimer;
     private float refreshTimer;
 
@@ -77,6 +79,23 @@ public class ConstructorWindow : MonoBehaviour
 
         refreshTimer -= Time.unscaledDeltaTime;
         if (refreshTimer <= 0f) Refresh(); // їжа й черга змінюються самі
+
+        // превʼю біжить на місці
+        if (previewLegs != null)
+        {
+            previewTime += Time.unscaledDeltaTime * 10f * Mathf.Max(0.5f, build.Speed / 2f);
+            Sprite legs = build.Legs.Sprite(1 + (int)previewTime % 4);
+            if (legs != null) previewLegs.sprite = legs;
+        }
+    }
+
+    // Показати конкретну збірку (для тестів і підказок).
+    public void Show(AntBuild b, AntGroup g)
+    {
+        Open();
+        build = b;
+        group = g;
+        Refresh();
     }
 
     // ---------- Дії ----------
@@ -130,6 +149,13 @@ public class ConstructorWindow : MonoBehaviour
         foreach (var kv in groupButtons)
             SetPicked(kv.Value, GroupColor(kv.Key), kv.Key == group);
 
+        if (previewBody != null)
+        {
+            previewBody.sprite = build.Body.Sprite();
+            previewJaw.sprite = build.Jaw.Sprite();
+            if (previewLegs.sprite == null) previewLegs.sprite = build.Legs.Sprite(0);
+        }
+
         statsText.text = "HP " + build.Hp
                        + "    SPEED " + Num(build.Speed)
                        + "    CARRY " + build.Carry
@@ -174,6 +200,10 @@ public class ConstructorWindow : MonoBehaviour
             font = any != null ? any.font : TMP_Settings.defaultFontAsset;
         }
 
+        // місце праворуч під превʼю мурахи
+        bool hasArt = build.Body.Sprite() != null;
+        if (hasArt && panelSize.x < 820f) panelSize = new Vector2(820f, panelSize.y);
+
         panel = new GameObject("ConstructorWindow", typeof(RectTransform));
         panel.transform.SetParent(transform, false);
         var prt = (RectTransform)panel.transform;
@@ -209,7 +239,10 @@ public class ConstructorWindow : MonoBehaviour
             rowY -= btnH + 14f;
         }
 
-        statsText = Label("", new Vector2(0f, rowY + 4f), new Vector2(w - 40f, 34f), 20f, TextAlignmentOptions.Center);
+        statsText = hasArt
+            ? Label("", new Vector2(-110f, rowY + 4f), new Vector2(w - 260f, 34f), 20f, TextAlignmentOptions.Center)
+            : Label("", new Vector2(0f, rowY + 4f), new Vector2(w - 40f, 34f), 20f, TextAlignmentOptions.Center);
+        if (hasArt) BuildPreview(new Vector2(w / 2f - 110f, top - 152f), 150f);
         rowY -= 50f;
 
         // група
@@ -234,6 +267,37 @@ public class ConstructorWindow : MonoBehaviour
         queueText.color = new Color(0.8f, 0.78f, 0.7f);
 
         panel.SetActive(false);
+    }
+
+    // Рамка з трьома шарами мурахи (ноги, тіло, щелепа), 4× піксель.
+    private void BuildPreview(Vector2 pos, float size)
+    {
+        var frame = new GameObject("Preview", typeof(RectTransform));
+        frame.transform.SetParent(panel.transform, false);
+        var rt = (RectTransform)frame.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(size, size);
+        rt.anchoredPosition = pos;
+        var bg = frame.AddComponent<Image>();
+        bg.color = new Color(0.18f, 0.08f, 0.06f); // як земля мурашника
+        bg.raycastTarget = false;
+
+        previewLegs = PreviewLayer(frame.transform, size - 22f);
+        previewBody = PreviewLayer(frame.transform, size - 22f);
+        previewJaw = PreviewLayer(frame.transform, size - 22f);
+    }
+
+    private static Image PreviewLayer(Transform parent, float size)
+    {
+        var go = new GameObject("Layer", typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(size, size);
+        var img = go.AddComponent<Image>();
+        img.preserveAspect = true;
+        img.raycastTarget = false;
+        return img;
     }
 
     private TMP_Text Label(string text, Vector2 pos, Vector2 size, float fontSize, TextAlignmentOptions align, Transform parent = null)

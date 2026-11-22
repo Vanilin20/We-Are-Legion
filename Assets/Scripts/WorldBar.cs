@@ -17,11 +17,22 @@ public class WorldBar : MonoBehaviour
 
         var back = new GameObject("Back");
         back.transform.SetParent(go.transform, false);
-        back.transform.localScale = new Vector3(width + height * 0.4f, height * 1.6f, 1f);
         var br = back.AddComponent<SpriteRenderer>();
-        br.sprite = PlaceholderSprites.Square;
-        br.color = new Color(0.1f, 0.1f, 0.1f, 0.9f);
         br.sortingOrder = order;
+        Sprite frame = GameArt.Get("hp_back"); // рамка 18×4, усередині 16×2
+        if (frame != null)
+        {
+            float backW = width * 18f / 16f;
+            br.sprite = frame;
+            back.transform.localScale = Vector3.one * (backW / frame.bounds.size.x);
+            height = backW * 2f / 18f;
+        }
+        else
+        {
+            back.transform.localScale = new Vector3(width + height * 0.4f, height * 1.6f, 1f);
+            br.sprite = PlaceholderSprites.Square;
+            br.color = new Color(0.1f, 0.1f, 0.1f, 0.9f);
+        }
 
         var f = new GameObject("Fill");
         f.transform.SetParent(go.transform, false);

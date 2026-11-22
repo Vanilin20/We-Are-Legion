@@ -49,8 +49,13 @@ public class FoodItem : MonoBehaviour
 
         Cell = Grid.WorldToCell(transform.position);
         transform.position = Grid.CellCenter(Cell);
-        float size = Grid.CellWorldSize * placeholderSizeCells * (amount > 1 ? 1.6f : 1f);
-        PlaceholderSprites.Ensure(gameObject, true, placeholderColor, size, 1);
+        // арт: м'ясо або одна з трьох крихт (полотно 32 px = клітинка)
+        string art = amount > 1 ? "meat" : "crumb_" + Random.Range(0, 3);
+        if (!GameArt.ApplyIfEmpty(gameObject, art, Grid.CellWorldSize, 1))
+        {
+            float size = Grid.CellWorldSize * placeholderSizeCells * (amount > 1 ? 1.6f : 1f);
+            PlaceholderSprites.Ensure(gameObject, true, placeholderColor, size, 1);
+        }
 
         all.Add(this);
         Task = new PickupTask(this);

@@ -24,7 +24,8 @@ public class Storage : MonoBehaviour
         if (Grid == null) { Debug.LogError("Storage: не знайшов сітку"); return; }
         Cell = Grid.WorldToCell(transform.position);
         transform.position = Grid.CellCenter(Cell);
-        PlaceholderSprites.Ensure(gameObject, false, placeholderColor, Grid.CellWorldSize * 0.8f, 1);
+        if (!GameArt.ApplyIfEmpty(gameObject, "storage", Grid.CellWorldSize, 1))
+            PlaceholderSprites.Ensure(gameObject, false, placeholderColor, Grid.CellWorldSize * 0.8f, 1);
     }
 
     void OnDestroy()
