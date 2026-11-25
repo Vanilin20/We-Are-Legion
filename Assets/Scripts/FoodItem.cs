@@ -51,6 +51,7 @@ public class FoodItem : MonoBehaviour
         transform.position = Grid.CellCenter(Cell);
         // арт: м'ясо або одна з трьох крихт (полотно 32 px = клітинка)
         string art = amount > 1 ? "meat" : "crumb_" + Random.Range(0, 3);
+        if (GameArt.Get(art) == null && amount <= 1) art = "crumb_0"; // намальовано лише один варіант
         if (!GameArt.ApplyIfEmpty(gameObject, art, Grid.CellWorldSize, 1))
         {
             float size = Grid.CellWorldSize * placeholderSizeCells * (amount > 1 ? 1.6f : 1f);

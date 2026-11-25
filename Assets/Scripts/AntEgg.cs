@@ -44,10 +44,10 @@ public class AntEgg : MonoBehaviour, ICellBlocker
         shell.transform.SetParent(transform, false);
         var sr = shell.AddComponent<SpriteRenderer>();
         sr.sortingOrder = 1;
-        Sprite art = GameArt.Get("egg");
+        Sprite art = GameArt.Get("larva") ?? GameArt.Get("egg");
         if (art != null)
         {
-            sr.sprite = art; // 16×16 = пів клітинки, з відтінком кольору тіла
+            sr.sprite = art; // личинка 16×16 = пів клітинки, з відтінком кольору тіла
             shell.transform.localScale = Vector3.one * (0.5f * cell / art.bounds.size.x);
             sr.color = Color.Lerp(Color.white, Build.Body.color, 0.3f);
         }
